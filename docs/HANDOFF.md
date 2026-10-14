@@ -14,7 +14,7 @@
 - 未契約のローカル試し書き許可が未確定のため、API モードの未契約アカウントは宛先/本文作成を止めます。試し書きは開発デモで可能です。
 - 端末暗号化は SQLCipher を採用。OS のファイル保護のみより秘密内容の DB 抽出に強く、項目ごとの自前暗号より nonce/暗号化漏れを減らせます。Expo Go 非対応で dev build 必須。鍵紛失時は DB を読みません。iOS バックアップの明示除外、Android 実機での鍵失効、再インストール/復元の検証は未完了です。
 
-## 検証済み
+## 初期区切りの検証
 
 - npm の公式 registry から Expo 57.0.28、@expo/ui 57.0.23、React Native 0.86.3 / React 19.2.3 を解決。`expo install --check` 一致。
 - TypeScript `tsc --noEmit` 成功（API 共有型を含む）。
@@ -22,7 +22,7 @@
 - `expo prebuild --no-install` 成功。SQLCipher 有効を ios/Podfile.properties.json で確認。
 - `pod install` 成功。環境 Ruby の `filter_map` 未対応により precompiled module の警告あり、ソースビルドにフォールバック。
 - Xcode 27.0 / Simulator SDK 27.0 / Debug / CODE_SIGNING_ALLOWED=NO のビルドで `BUILD SUCCEEDED`。生成物 `/tmp/deadmans-derived/Build/Products/Debug-iphonesimulator/app.app`。証拠ログ `/tmp/deadmans-ios-build.log`。
-- `expo export --platform ios --platform android` 成功。両 OS の Hermes bundle 生成。Android のネイティブ Gradle ビルド・実機確認は未実施です。
+- `expo export --platform ios --platform android` 成功。両 OS の Hermes bundle 生成。この時点ではAndroidのネイティブ検証は未実施でした（後述の第2区切りでGradleビルド成功）。
 - Web dev preview を localhost:8082 で起動。架空の family@example.com を使用し、宛先追加 → 秘密の依頼を選択 → 質問に回答 → 本文追加 → 端末下書き保存 → 下書き一覧 → 再編集 → デモ保存を確認。実 API 呼出し・メール送信なし。
 - iOS Simulator への install / launch のプロセス起動は成功。詳細な画面検証の結果は以下に追記します。
 
@@ -32,11 +32,15 @@
 
 ## 次の検証
 
-iOS/Android 実機で、文字拡大、VoiceOver/TalkBack、戻る操作、画面ロック、バックアップ、SQLCipher の鍵紛失、通知拒否、通信断、認証更新の応答喪失、409 競合、released→paused と held/paused の非再開を確認してください。ライブ API 統合・実ストア購入は今回実行していません。
+iOS/Android 実機で、文字拡大、VoiceOver/TalkBack、戻る操作、画面ロック、バックアップ、SQLCipher の鍵紛失（iOS Simulatorでは上記検証済み）、通知拒否、通信断、認証更新の応答喪失、409 競合、released→paused と held/paused の非再開を確認してください。ライブ API 統合・実ストア購入は今回実行していません。
 
-## 起動確認の制約
+## ネイティブの起動・保存検証
 
-iOS のネイティブ install / launch は成功しましたが、URL を開く OS 確認の画面に留まりました。XcodeBuildMCP の `snapshot_ui` は 2 回とも Simulator remote automation session の作成でタイムアウトしました。スクリーンショットでも OS 確認が表示されており、**アプリ本体の iOS 画面・SQLCipher 実行時保存は未検証**です。ビルド成功とは分けて扱ってください。ブラウザでも画像キャプチャ機能は利用できませんでしたが、DOM による操作結果・保存本文・下書き一覧は確認しました。
+iOS27 Simulatorで通常ホームを描画し、NativeTabsとExpo UIボタン、デモの未確定期限・チェックイン無効表示を確認しました。専用診断DBではSQLCipher保存→接続を閉じて再読込（PHASE 1）、アプリのプロセスを終了して再起動→復元→鍵を一時削除→STORAGE_LOCKEDで拒否→鍵の自動再発行なし→元の鍵を復元して同じデータを読込（PHASE 2）まで成功しました。DBファイルは12,288 bytesで、平文SQLiteヘッダーと架空fixture文字列は含まれていませんでした。通常の下書き、認証情報、実APIには触れていません。
+
+検証にはXcodeのローカルad-hoc Simulator署名を使用しました。`CODE_SIGNING_ALLOWED=NO`ではKeychainが動かず、署名だけでもentitlementsが空になるため、`CODE_SIGN_ENTITLEMENTS`に開発専用のapplication-identifier・keychain-access-groupsを与えてXcodeで再ビルドしました。外部証明書・Appleチーム・新規認証情報は発行していません。この一時設定は本番署名やアプリ設定に含めません。
+
+証拠: [通常ホーム](evidence/ios-home.png)、[保存と再接続](evidence/ios-storage-phase1.png)、[プロセス再起動と鍵喪失](evidence/ios-storage-phase2.png)。ビルドログは `/tmp/deadmans-entitled-simulator.log`（BUILD SUCCEEDED）。SimulatorのAX自動操作とブラウザ画像キャプチャには制約が残り、ネイティブ全画面の操作は未検証です。画像は公式の `simctl io screenshot` で取得しました。
 
 ## 第2区切りの実装・検証
 
@@ -45,6 +49,8 @@ iOS のネイティブ install / launch は成功しましたが、URL を開く
 - Webの本人確認画面・開始同意画面・テスト配信画面を描画し、架空入力でもデモの送信・同意確定が無効なことを確認。
 - 確認リンクはTanStack mutation variablesに入れず、画面離脱・背景化・送信時にメモリから消去。Universal Links / App LinksのOS配線は未設定で、確認メールのリンクは明示的な貼付で確認します。
 - 同意は画面離脱・背景化・設定version/同意版更新で解除。送信結果が不明な場合、配信履歴を照合してから再操作。本人宛テストの新しい依頼を過去の成功と混同しません。
-- Android SDK/Java17/Pixel_10 AVDは存在。Gradleが必要なSDK36/NDK/CMakeを解決でき、ローカルDebugビルドを実行。最終結果は追記します。
-- iOS起動の再調査で、旧生成AppDelegateはiOS27のScene要件によりJS起動前にSIGTRAPすることをcrash reportから確認。`plugins/with-scene-lifecycle.cjs`でインストール済みExpoの公式SceneDelegate/イベント転送を使うよう修正し、冪等性テストを追加。ビルドとruntime結果は追記します。
+- Android SDK/Java17/Pixel_10 AVDは存在。Gradleが必要なSDK36/NDK/CMakeを解決し、`:app:assembleDebug` が25分11秒で BUILD SUCCESSFUL。APKは `android/app/build/outputs/apk/debug/app-debug.apk`、ログは `/tmp/deadmans-android-build.log`。adb接続端末は0件で、Androidエミュレータ上の操作は未実施です。
+- iOS起動の再調査で、旧生成AppDelegateはiOS27のScene要件によりJS起動前にSIGTRAPすることをcrash reportから確認。`plugins/with-scene-lifecycle.cjs`でインストール済みExpoの公式SceneDelegate/イベント転送を使うよう修正し、冪等性テストを追加。再ビルド成功後、上記の通常ホーム描画と保存診断を確認済みです。
 - 独立した診断DBでSQLCipher保存/再接続/再起動/鍵喪失拒否を検証するdev-only画面を追加。リリース/demo以外では作動しません。通常の本文/認証鍵とは別の名前空間です。
+
+主要フローのコミット: `e91ceda`（main）。APIの追加修正45e56ac/e087a7aについては、次の購入ブリッジ接続時に契約を再確認してください。
