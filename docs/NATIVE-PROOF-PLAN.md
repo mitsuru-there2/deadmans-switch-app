@@ -1,6 +1,6 @@
 # 購入証明ブリッジとクライアント連携
 
-2026-10-14。API `e087a7a` の `docs/app-contract.md` に対応。コードとローカルモック、iOS/Android development buildを検証済み。実ストアでの証明取得・購入・復元は未実施です。
+2026-10-14。API `45dc01e` の `docs/app-contract.md` に対応。コードとローカルモック、iOS/Android development buildを検証済み。実ストアでの証明取得・購入・復元は未実施です。
 
 ## 実装
 
@@ -21,13 +21,22 @@
 
 署名/purchaseTokenは画面のメモリと呼出しスタックだけに保持します。候補は背景化・画面離脱・送信時に破棄し、背景化中に届いた候補も採用しません。TanStack mutation変数、ログ、URL、SQLiteに入れません。
 
-## 結果不明時の制限
+## 復元結果の再取得
 
-復元・fresh bootstrapの応答喪失、復元後SecureStore保存失敗はpendingを保持します。旧Bearerの再利用・自動リプレイ・別bootstrapを止めます。構造化された4xx拒否（401を除く）だけはfresh identityを残して利用者の別候補選択を許可します。復元を送信していない、または明確に拒否された場合に限り、開始前の認証が正常だった端末は復元を中止して元のアカウントへ戻れます。
+送信前にOSの暗号学的乱数32bytesを生成し、paddingなしBase64URL 43文字のoperationSecretにします。API origin・元のfresh Bearer・操作秘密・pendingを1つのSecureStore envelopeに保存してから送信します。保存に失敗すれば送信しません。購入証明は永続化しません。同じfresh Bearerでの別秘密/別証明への変更は行いません。
 
-**APIの不足**: 成功した復元の応答を失った端末へ結果を安全に再配布する冪等性/再取得契約はありません。この状態をこのクライアントだけで解除しません。復旧窓口やメールによる補助復旧も未接続です。公開前に契約と利用者案内が必要です。
+応答喪失・最終SecureStore切替失敗・アプリ再起動後は「送信した復元の結果を確認」から `/auth/restore/result` を呼びます。元fresh Bearerと保存済みoperationSecretだけを送り、購入証明の再送や再購入はしません。結果確認にはRevenueCatキーやnative proof moduleを要求しないため、ストア設定が不足していても保存済み結果は照合できます。自動ポーリングはしません。
 
-RevenueCatの購入移転/alias設定は未確定です。コードは復元前の新IDへのrestore/logInを避けますが、SDK初期化時・購入・置換での実ストア挙動はsandbox実機で確認が必要です。通常購入の結果が未解決のまま端末を失う場合、最初の本人verifyがサーバーに登録されていなければ復元を拒否します。
+- completed: サーバーが返す同じsession全体をSecureStoreへ保存して、元fresh Bearer・操作秘密を消去。その後に画面/cacheを破棄しRevenueCatを元UUIDへ合わせます。再発行・device-session更新・チェックイン・見守り再開・通知登録は行いません。
+- pending: 未完了のまま通常APIを止めます。本文やストア証明は再送せず、利用者による結果確認を待ちます。
+- failed: 拒否された同じ操作は再開せず、別候補へ差し替えません。
+- 404/期限切れ/失効: 復元が未実行とは扱わず、通常APIを止めます。結果期限はサーバー受付から最大15分で、確認しても延長されません。外側expiresAtとsession.expiresAtを別扱いにし、端末時計だけで可否を確定しません。
+
+別の復元を始めたい場合は、明示確認を挟んで **元fresh Bearer** で `DELETE /auth/device-sessions` を送ります。204または401を確認した後だけ元認証・秘密を消去し「放棄済み」にします。通信不明では停止を保ち、次の明示操作で同じ失効操作を確認します。放棄後の新bootstrap/OS証明/操作秘密生成は、別の利用者操作で開始します。旧Bearerに戻りません。非同期処理は直列化し、保存された元fresh Bearer・操作秘密・操作状態を照合して旧操作から遅れて届いた応答を破棄します。
+
+fresh bootstrap自体の応答喪失は再取得対象外です。送信前SecureStore保存失敗も結果再取得が保証されません。保存済み秘密がない場合、旧認証の再利用や勝手な新bootstrapで回避しません。未送信と確定できる認可失効だけは元のready状態へ戻します。
+
+API migration `0008_pink_shen.sql` が必要です。新しいサーバーキー・環境変数は不要。今回の実装は既存コード/モックのみで、稼働DB・ストア設定は変更していません。RevenueCatの購入移転/alias設定、実機sandboxでの所有者・署名・置換購入の挙動は引き続き確認が必要です。
 
 ## 検証と次の手順
 

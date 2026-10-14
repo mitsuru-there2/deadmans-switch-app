@@ -16,6 +16,7 @@ function service(
     missingToken: false,
     appState: "active",
     generation: 1,
+    resultStatus: "completed",
   };
   let configuredSDK = false;
   const product = { identifier: "annual", subscriptionPeriod: "P1Y" };
@@ -116,6 +117,15 @@ function service(
     },
     "../api/session": {
       identityRevision: () => 0,
+      retrieveRecoveryResult: async () => {
+        events.push("server-result");
+        return state.resultStatus === "completed"
+          ? { status: "completed", session: { accountToken: uuid }, expiresAt: 900000 }
+          : { status: state.resultStatus, expiresAt: 900000 };
+      },
+      abandonRecoverySession: async () => {
+        events.push("abandon-source");
+      },
       prepareRecovery: async () => {
         events.push("fresh-bootstrap");
         return { token: "MOCK_FRESH" };
@@ -271,4 +281,25 @@ test("background after SDK dispatch with an unknown result preserves pending and
     /PURCHASE_UNRESOLVED/,
   );
   assert.equal(f.events.filter((event) => event === "purchase").length, 1);
+});
+
+test("result recovery works without store configuration and clears cache only after completed auth", async () => {
+  const f = service(false);
+  f.state.resultStatus = "pending";
+  assert.equal(
+    (
+      await f.api.recoverResult(async () => {
+        f.events.push("clear-cache");
+      })
+    ).status,
+    "pending",
+  );
+  assert.deepEqual(f.events, ["server-result"]);
+  f.state.resultStatus = "completed";
+  const result = await f.api.recoverResult(async () => {
+    f.events.push("clear-cache");
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.revenueCatReady, false);
+  assert.deepEqual(f.events, ["server-result", "server-result", "clear-cache"]);
 });

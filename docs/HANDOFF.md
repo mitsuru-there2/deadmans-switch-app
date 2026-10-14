@@ -63,3 +63,12 @@ iOS27 Simulatorで通常ホームを描画し、NativeTabsとExpo UIボタン、
 - ローカル型検査、29件のNodeテスト、3プラットフォームexport成功。iOS/Androidのnative module込みビルド成功。Web DOMで未設定状態と購入/復元操作無効を確認。iOSは通常ホーム起動成功、購入画面へのOSリンク確認のAX取得が失敗して同画面は未検証。
 - 復元の結果再取得契約は不足しており、応答喪失/最終Keychain書込失敗では安全側に停止します。別bootstrap・旧Bearer再利用で回避しません。RevenueCatの購入移転設定・実挙動、実機sandboxの署名/所有者照合は未検証です。
 - 実装詳細は[購入証明](NATIVE-PROOF-PLAN.md)、外部設定と実機試験の最小手順は[公開前検証](RELEASE-VALIDATION.md)。
+
+
+## 第4区切り: 復元結果再取得
+
+API `45dc01e` の契約に接続。256bit操作秘密を元fresh Bearerと同一SecureStore envelopeへ送信前保存し、結果APIで最大15分同じ新sessionを再取得します。結果の原子的保存後にだけ旧秘密を除去しcache/画面切替とRevenueCat連携へ進みます。pending/failed/404では旧認証へ戻りません。別復元は元fresh BearerのDELETEが204/401となった後に、別の明示操作で開始します。遅れた旧操作応答を破棄し、通常API・トークン更新・チェックインの自動実行はありません。
+
+型検査・39テスト・3プラットフォームexport成功。native依存/ソース/設定は変更なく、既存expo-cryptoの暗号学的乱数を使用するためnative再ビルドは省略。実機での今回画面操作とsandboxストアは未検証。fresh bootstrapの応答喪失は引き続き対象外です。以前の「結果再取得契約不足」はこの区切りで解消しました。
+
+必要なユーザー設定は[公開前検証の3段階](RELEASE-VALIDATION.md)へ集約しました。外部設定、新しいサーバーキー、稼働DB更新、実購入・送信は行っていません。

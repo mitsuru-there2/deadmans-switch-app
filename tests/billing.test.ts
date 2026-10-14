@@ -29,6 +29,7 @@ function fixture() {
   const manager = createSessionManager({
     origin: "https://mock.invalid",
     now: () => 0,
+    makeOperationSecret: async () => "S".repeat(43),
     read: async () => raw,
     write: async (value) => {
       if (failFinalWrite && JSON.parse(value).session?.token === restored.token)
@@ -91,12 +92,12 @@ test("lost restore response and final Keychain write failure never reuse old bea
     assert.equal(JSON.parse(f.raw()).operation, "restore");
   }
 });
-test("definitive restore rejection allows manual proof selection under the same fresh identity", async () => {
+test("definitive restore rejection stays bound to its original operation and fresh identity", async () => {
   const f = fixture();
   await f.manager.prepareRecovery();
   f.fail(new SessionRequestRejected("PURCHASE_NOT_REGISTERED"));
   await assert.rejects(f.manager.restore(proof), /PURCHASE_NOT_REGISTERED/);
-  assert.equal((await f.manager.prepareRecovery()).token, temporary.token);
+  await assert.rejects(f.manager.prepareRecovery(), /RESTORE_OUTCOME_UNKNOWN/);
   assert.equal(f.calls.length, 2);
   await assert.rejects(f.manager.get(), /RECOVERY_REQUIRED/);
 });
@@ -110,6 +111,7 @@ test("lost recovery bootstrap stays blocked across manager reload", async () => 
       raw = value;
     },
     now: () => 0,
+    makeOperationSecret: async () => "S".repeat(43),
     changed() {},
     request: async () => {
       calls++;

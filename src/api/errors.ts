@@ -25,8 +25,14 @@ const copy: Record<string, string> = {
   PURCHASE_UNRESOLVED: "前回の購入結果を先に再確認してください。重ねて購入は開始しません。",
   RECOVERY_REQUIRED:
     "認証処理が未完了です。設定の「年間プラン・同じストアの復元」で状態を確認してください。",
+  RESTORE_RESULT_UNAVAILABLE:
+    "復元結果の取得期限が過ぎたか、認証が失効しています。未実行とは断定できません。前の復元用認証の失効を確認してからやり直してください。",
+  RESTORE_OPERATION_CHANGED:
+    "前の復元操作から遅れて届いた結果を破棄しました。現在の復元状態を確認してください。",
+  RESTORE_OPERATION_CONFLICT:
+    "別の操作や購入証明に変更することはできません。保存された操作の結果を確認してください。",
   RESTORE_OUTCOME_UNKNOWN:
-    "復元の結果を確定できません。旧認証の再利用や自動再送を止めています。復旧窓口の整備が必要です。",
+    "復元の結果を確定できません。保存済みの復元がある場合は「送信した復元の結果を確認」を使ってください。旧認証の再利用や自動再送は止めています。",
   RESTORE_REQUIRES_FRESH_DEVICE_IDENTITY:
     "復元専用の新しい端末認証が必要です。既存アカウント同士の統合はできません。",
   PURCHASE_NOT_REGISTERED:

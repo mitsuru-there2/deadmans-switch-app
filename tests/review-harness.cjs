@@ -38,6 +38,7 @@ async function checkinWhileBackground() {
     './config':{apiUrl:'https://mock.invalid',mode:'api'},
     '../api/config':{apiUrl:'https://mock.invalid',mode:'api'},
     '../storage/vault':{},
+    'expo-crypto':{getRandomBytesAsync:async()=>new Uint8Array(32)},
     'expo-secure-store':{getItemAsync:async()=>saved,setItemAsync:async(k,v)=>{saved=v},WHEN_UNLOCKED_THIS_DEVICE_ONLY:1},
     'deadmans-switch-api/client':{createApiClient:require('hono/client').hc},
     'deadmans-switch-api/responses':{},

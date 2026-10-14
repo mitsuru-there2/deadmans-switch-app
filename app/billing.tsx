@@ -1,4 +1,4 @@
-import { identityRevision } from "../src/api/session";
+import { identityRevision, getRecoveryState } from "../src/api/session";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
@@ -16,6 +16,8 @@ import {
   loadProducts,
   loadExistingProofs,
   recover,
+  recoverResult,
+  abandonRecovery,
   verifyExisting,
   setBillingScreenFocused,
   type ProofCandidate,
@@ -35,6 +37,14 @@ export default function Billing() {
       ? "認証を復元しました。契約状態を更新し、通知を再登録してください。購入サービスの接続確認に失敗しても復元を繰り返さないでください。"
       : "",
   );
+  const recoveryStatus = useQuery({
+    queryKey: ["recovery-state"],
+    queryFn: getRecoveryState,
+    enabled: mode === "api" && Platform.OS !== "web",
+  });
+  useEffect(() => {
+    if (recoveryStatus.data) setRecovery(recoveryStatus.data.phase !== "none");
+  }, [recoveryStatus.data]);
   const subscriptions = useQuery({
     queryKey: ["subscriptions"],
     queryFn: () => gateway.subscriptions(),
@@ -79,6 +89,7 @@ export default function Billing() {
     } catch (e) {
       setNotice(errorText(e));
     } finally {
+      if (mode === "api" && Platform.OS !== "web") await recoveryStatus.refetch();
       running.current = false;
       setBusy(false);
     }
@@ -195,12 +206,78 @@ export default function Billing() {
           onPress={() =>
             confirmAction(
               "元のデータを復元",
-              "復元専用の端末認証へ切り替えます。処理中は現在のアカウント操作を止めます。結果不明時は自動でやり直せません。続けますか？",
+              "復元専用の端末認証へ切り替えます。処理中は現在のアカウント操作を止めます。結果不明時は保存した認証で結果を確認します。続けますか？",
               () => findProofs(true),
             )
           }
         />
-        {recovery && (
+        <Notice>
+          復元の結果はサーバー受付から最大15分、保存した端末認証で再確認できます。確認しても期限は延長されません。
+        </Notice>
+        {recoveryStatus.data?.expiresAt && (
+          <Notice>結果確認期限: {formatDate(recoveryStatus.data.expiresAt)}</Notice>
+        )}
+        {recoveryStatus.data?.phase === "pending" && (
+          <Notice>復元結果は未確定です。再購入せず、結果を確認してください。</Notice>
+        )}
+        {recoveryStatus.data?.phase === "failed" && (
+          <Notice error>
+            復元は拒否されました。この操作の証明は変更できません。別の購入でやり直す場合は、先に下の操作で元の復元用認証を失効してください。
+          </Notice>
+        )}
+        {recoveryStatus.data?.phase === "unavailable" && (
+          <Notice error>
+            期限切れまたは失効により結果を取得できません。復元が未実行だったとは限りません。
+          </Notice>
+        )}
+        {recoveryStatus.data?.phase === "bootstrap-unknown" && (
+          <Notice error>
+            復元用の端末認証を確定できていません。復元結果の再取得対象外です。別のアカウントは自動作成しません。
+          </Notice>
+        )}
+        {recoveryStatus.data?.phase === "abandoned" && (
+          <Notice>
+            前の復元用認証の失効を確認しました。「元のアカウントの購入を探す」から改めて始められます。
+          </Notice>
+        )}
+        <Action
+          label="送信した復元の結果を確認"
+          secondary
+          disabled={busy || !recoveryStatus.data?.canRetrieve}
+          onPress={() =>
+            void run(async () => {
+              clearProofs();
+              const result = await recoverResult(clearCache);
+              setNotice(
+                result.status === "completed"
+                  ? "認証を復元しました。通知は設定から再登録してください。"
+                  : result.status === "pending"
+                    ? "まだ処理が完了していません。しばらくしてから改めて結果を確認してください。"
+                    : "復元は拒否されました。別候補への変更には前の復元用認証の失効が必要です。",
+              );
+            })
+          }
+        />
+        <Action
+          label="前の復元用認証を失効してやり直せる状態にする"
+          secondary
+          disabled={busy || !recoveryStatus.data?.canAbandon}
+          onPress={() =>
+            confirmAction(
+              "前の復元操作を終了",
+              "元の復元用認証を失効します。失効を確認できるまで新しい復元は開始しません。既に成功していた場合も、元のアカウントへ自動で戻りません。",
+              () =>
+                void run(async () => {
+                  clearProofs();
+                  await abandonRecovery();
+                  setNotice(
+                    "失効を確認しました。必要なら購入を探す操作から復元をやり直してください。",
+                  );
+                }),
+            )
+          }
+        />
+        {recovery && recoveryStatus.data?.phase === "ready" && (
           <Action
             label="復元前のアカウントへ戻る"
             secondary

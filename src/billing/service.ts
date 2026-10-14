@@ -16,6 +16,8 @@ import {
   prepareRecovery,
   cancelRecoverySession,
   restoreSession,
+  retrieveRecoveryResult,
+  abandonRecoverySession,
   identityRevision,
 } from "../api/session";
 import { getAppleProofs, getGoogleProofs, proofModuleAvailable } from "../../modules/store-proof";
@@ -48,8 +50,9 @@ const assertReady = () => {
 const assertForeground = () => {
   if (AppState.currentState !== "active") throw new AppError("BILLING_INTERRUPTED");
 };
-async function exclusive<T>(operation: (authorize: () => void) => Promise<T>) {
-  assertReady();
+async function exclusive<T>(operation: (authorize: () => void) => Promise<T>, requireStore = true) {
+  if (requireStore) assertReady();
+  else if (mode !== "api" || Platform.OS === "web") throw new AppError("UNCONFIGURED");
   assertForeground();
   const generation = foregroundAuthority.current();
   const authorize = () => {
@@ -242,4 +245,28 @@ export async function recover(candidate: ProofCandidate, clearCache: () => Promi
 
 export async function cancelRecovery() {
   return exclusive(() => cancelRecoverySession());
+}
+
+// Result retrieval needs only the stored source bearer/secret and API connection,
+// so it remains usable when RevenueCat keys or the native proof module are absent.
+export async function recoverResult(clearCache: () => Promise<void>) {
+  return exclusive(async (authorize) => {
+    const result = await retrieveRecoveryResult(authorize);
+    if (result.status !== "completed")
+      return { status: result.status, expiresAt: result.expiresAt };
+    await clearCache();
+    let revenueCatReady = false;
+    if (billingConfigured) {
+      try {
+        await identify(result.session.accountToken!);
+        revenueCatReady = true;
+      } catch {
+        /* Auth is already restored. */
+      }
+    }
+    return { status: "completed" as const, revenueCatReady, expiresAt: result.expiresAt };
+  }, false);
+}
+export async function abandonRecovery() {
+  return exclusive((authorize) => abandonRecoverySession(authorize), false);
 }
