@@ -4,7 +4,7 @@ Expo / React Native の本人用アプリ。2026-10-14 時点の初期実装で�
 
 ## 起動
 
-Node 22.13 以上（検証 Node 24.14.0）、npm 11、同じ親フォルダに `deadmans-switch-api` が必要です。API の `client` export を file 依存で使用し、API のソースを変更しません。動作確認した API 基準は `de23b8f`（後続互換コミットも許容）です。
+Node 22.15 以上（検証 Node 24.14.0）、npm 11、同じ親フォルダに `deadmans-switch-api` が必要です。API の `client` export を file 依存で使用し、API のソースを変更しません。動作確認した API 基準は `b52e61a`（後続互換コミットも許容）です。
 
 ```sh
 npm ci
@@ -47,7 +47,11 @@ npm run start:demo
 - API モードで認証後の前面起動・明示ボタンからチェックイン。受信イベント・バックグラウンド・購入復元では発火しません。タイムアウトを成功と見なさず、Mutation は自動再送しません。
 - 409 時は下書きを保持し、最新保存内容の確認と明示操作なしに上書きしません。
 - 停止は明示確認を挟み、既に取得された本文を回収できないことを説明。
-- 最新のサーバー同意本文を全文表示。表示だけでは同意・監視有効化になりません。
+- 本人メールの確認依頼・届いた確認リンクの明示送信（メモリのみ）。確認済みメールの変更はAPI未定義のため提供しません。
+- 宛先の招待/再招待、承諾・辞退・通報、招待期限と24時間の再招待条件を表示。
+- 本人宛テストのdeliveryIdを追跡し、202/送信待ちとaccepted/deliveredを区別。配信状態を手動更新。
+- 最新のサーバー同意本文を全文表示し、明示同意・version確認後に監視開始/再開。画面離脱・背景化・同意版変更でチェックを解除。
+- 通知許可とExpo token取得は本人操作のみ。登録/更新/一覧/解除に対応。トークン変更は更新が必要な表示だけで、バックグラウンド自動登録/チェックインは行いません。
 
 ## 保存と秘密情報
 
@@ -61,10 +65,18 @@ API origin と user ID ごとに下書きを分離し、デモの DB も API モ
 
 ## 未完了の機能と設定
 
-[docs/HANDOFF.md](docs/HANDOFF.md) に契約依存、機能の未完了状態、検証結果を記載しています。購入・招待・通知テスト・有効化は接続準備中と表示します。実通知・実購入をしていません。
+[docs/HANDOFF.md](docs/HANDOFF.md) に契約依存、機能の未完了状態、検証結果を記載しています。購入と購入による復旧は接続準備中です。本人確認・招待・通知テスト・有効化は既存APIへ接続するコードを実装し、外部送信なしのモックで検証しました。実通知・実購入をしていません。
 
 SDK 57 と Expo UI 57 は公式の対応バージョンを `expo install` で解決しました。
 
 - https://docs.expo.dev/versions/latest/
 - https://docs.expo.dev/versions/latest/sdk/ui/
 - https://docs.expo.dev/versions/latest/sdk/sqlite/
+
+## 追加検証と監査
+
+[依存監査](docs/DEPENDENCY-AUDIT.md) に修正版・悪用条件・bundleへの到達性を記載しています。通常の `npm ci` で vendor デコーダーと限定UUID overrideも解決されます。
+
+Xcode 27のScene lifecycle要件に対し、`plugins/with-scene-lifecycle.cjs` でExpo自身の `ExpoAppSceneDelegate` を使います。生成されたAppDelegateに独自のUIWindowを作らず、Expoのイベント転送を保持します。
+
+ネイティブ保存の専用診断は `EXPO_PUBLIC_APP_MODE=demo EXPO_PUBLIC_STORAGE_DIAGNOSTIC=1 npm start -- --port 8082`。development buildでのみ有効です。Phase1の後プロセスを終了・再起動し、Phase2で鍵喪失時の拒否を確認します。専用の架空DBと鍵だけを使い、通常の下書きには触れません。診断終了後は環境変数を外して再起動してください。Webでは実行しません。

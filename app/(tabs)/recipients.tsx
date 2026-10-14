@@ -29,7 +29,7 @@ export default function Recipients() {
               title={r.name}
               detail={r.email}
               trailing={consentCopy[r.status]}
-              onPress={() => router.push({ pathname: "/message/[id]", params: { id: r.id } })}
+              onPress={() => router.push({ pathname: "/recipient/[id]", params: { id: r.id } })}
             />
           ))
         ) : (

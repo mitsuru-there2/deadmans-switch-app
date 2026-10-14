@@ -6,6 +6,17 @@ export class AppError extends Error {
   }
 }
 const copy: Record<string, string> = {
+  NOTIFICATIONS_UNCONFIGURED: "通知の配信設定が未完了です。まだ登録されていません。",
+  NOTIFICATIONS_DENIED: "通知は許可されていません。必要な場合は OS の設定で許可してください。",
+  DEVICE_LIMIT: "通知は最大5端末です。不要な登録を解除してから登録してください。",
+  DEVICE_ALREADY_REGISTERED:
+    "この通知先は別のアカウントに登録されています。復旧手順を確認してください。",
+  INVALID_CONTACT_LINK:
+    "確認リンクは無効か期限切れです。この端末で依頼した最新のリンクを確認してください。",
+  CONTACT_ALREADY_VERIFIED: "本人メールは確認済みです。状態を更新してください。",
+  VERIFIED_EMAIL_REQUIRED: "本人メールの確認を先に完了してください。",
+  CONSENT_VERSION_REQUIRED: "同意文が更新されました。全文を読み直してから改めて同意してください。",
+  RATE_LIMITED: "操作回数の上限に達しました。時間を置いて状態を確認してください。",
   VERSION_CONFLICT:
     "別の操作で内容が更新されています。下書きは残っています。最新の内容を確認してから保存し直してください。",
   PAUSE_BEFORE_EDITING: "編集する前に見守りを停止してください。",

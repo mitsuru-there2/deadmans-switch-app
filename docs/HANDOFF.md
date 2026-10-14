@@ -5,10 +5,10 @@
 ## 契約と未完了事項
 
 - API `client` export を file 依存で利用。`src/api/adapter.ts` の Gateway が画面との境界。API 購読は TanStack Query、本文/宛先の入力は TanStack Form + Zod。新規のテストフレームワーク、Sentry は追加していません。
-- 最新 API 契約の serverTime / activationBlockers、招待期限、GET consents/current に対応。同意本文を読む画面はあり、明示同意の保持と activate は未接続です。監視有効化は UI で無効です。
-- 本人メール登録・確認リンク、招待、本人宛テスト、通知操作チェックイン、通知 token 登録/更新/削除、購入と同一ストア復元、履歴、サーバー export/アカウント削除は今後の接続作業です。準備中のボタンや説明を置き、成功を偽装しません。
+- 最新 API `b52e61a` の serverTime / activationBlockers、招待期限、GET consents/current / GET devices に対応。全文同意とversion付きactivate（開始/再開）、明示停止まで接続済みです。表示・チェックイン・課金復元だけでは再開しません。
+- 本人メール登録・確認リンクの手動貼付、招待/再招待/状態、本人宛テストと配信履歴、通知 token 登録/更新/削除を接続済み。本人操作だけで許可を要求。EAS/APNs/FCM未設定時は無効。購入と同一ストア復元、通知アクション、アカウントexport/削除、検証済みメール変更、監査履歴は未接続です。
 - Self-test を接続する場合は 202 の deliveryId を記録し、accepted/delivered まで成功扱いしないこと。invitation の queued も配信/承諾とは別です。
-- RevenueCat SDK は導入しましたが configure/purchase/restore は実行しません。API の `accountToken` 結合、Android の SHA-256 obfuscatedAccountId 差、Apple signedTransaction JWS 取得を設計する必要があります。CustomerInfo / appUserID / transactionIdentifier だけで旧アカウント復旧を許しません。API 担当の docs/app-contract.md を継続参照してください。
+- RevenueCat SDK は導入しましたが configure/purchase/restore は実行しません。API側はAndroidのBase64(SHA-256(UUID))とUUIDの厳格照合を追加済み。Apple JWS / Google purchaseToken取得のExpo local moduleと復旧の順序を次の区切りで実装可能です。`docs/NATIVE-PROOF-PLAN.md` を参照。CustomerInfo / appUserID / transactionIdentifier だけで旧アカウント復旧を許しません。API 担当の docs/app-contract.md を継続参照してください。
 - Universal Links / App Links の許可ドメインは未設定です。現在は開発用 scheme のみ。秘密トークンを URL query やログへ転記する復旧処理はありません。
 - app.json の bundleIdentifier / package は **開発用仮値** `jp.example.watashini.dev`。ストア登録済み ID、EAS projectId、通知 credential、ストア商品、RevenueCat 公開 SDK key と native proof bridge は公開前に設定が必要です。秘密 API キーを EXPO_PUBLIC_* に入れないこと。
 - 未契約のローカル試し書き許可が未確定のため、API モードの未契約アカウントは宛先/本文作成を止めます。試し書きは開発デモで可能です。
@@ -28,7 +28,7 @@
 
 ## 依存監査
 
-`npm audit --omit=dev` は 29 件（high 19 / moderate 10、依存元への波及を含む）を報告。直接の原因は braces <=3.0.3、node-forge <=1.4.0、decode-uri-component <=0.4.2、uuid <11.1.1。多くは Metro / Expo CLI の依存ですが、query-string の decoder は Router の依存です。提示された自動修正には Expo 44、RN 0.72 等への非互換変更が含まれるため `audit fix --force` は行っていません。SDK 互換性を保つ patch / upstream 更新の調査が公開前に必要です。未審査の override は追加していません。
+互換修正で29件→19件（high19、開発依存元への波及込み）。実ランタイムのURI decoderは公式0.5.0の互換CJSコピー、xcodeのUUIDはscope overrideで修正。残りは修正版のないbraces/node-forgeで、今回のrelease source mapには含まれません。条件と出所は[依存監査](DEPENDENCY-AUDIT.md)。
 
 ## 次の検証
 
@@ -37,3 +37,14 @@ iOS/Android 実機で、文字拡大、VoiceOver/TalkBack、戻る操作、画�
 ## 起動確認の制約
 
 iOS のネイティブ install / launch は成功しましたが、URL を開く OS 確認の画面に留まりました。XcodeBuildMCP の `snapshot_ui` は 2 回とも Simulator remote automation session の作成でタイムアウトしました。スクリーンショットでも OS 確認が表示されており、**アプリ本体の iOS 画面・SQLCipher 実行時保存は未検証**です。ビルド成功とは分けて扱ってください。ブラウザでも画像キャプチャ機能は利用できませんでしたが、DOM による操作結果・保存本文・下書き一覧は確認しました。
+
+## 第2区切りの実装・検証
+
+- 実Hono Clientをfetch差し替えしたローカル試験で、本人メール確認→招待→テストのdeliveryId照合→同意→開始/停止→通知登録一覧/解除を確認。外部HTTPリクエストなし。409/同意版不一致/応答喪失時に再送なし。
+- Node組み込みテスト11件。型検査成功。3プラットフォームexport成功。`npm ci --dry-run --ignore-scripts --offline`でlock整合を確認。
+- Webの本人確認画面・開始同意画面・テスト配信画面を描画し、架空入力でもデモの送信・同意確定が無効なことを確認。
+- 確認リンクはTanStack mutation variablesに入れず、画面離脱・背景化・送信時にメモリから消去。Universal Links / App LinksのOS配線は未設定で、確認メールのリンクは明示的な貼付で確認します。
+- 同意は画面離脱・背景化・設定version/同意版更新で解除。送信結果が不明な場合、配信履歴を照合してから再操作。本人宛テストの新しい依頼を過去の成功と混同しません。
+- Android SDK/Java17/Pixel_10 AVDは存在。Gradleが必要なSDK36/NDK/CMakeを解決でき、ローカルDebugビルドを実行。最終結果は追記します。
+- iOS起動の再調査で、旧生成AppDelegateはiOS27のScene要件によりJS起動前にSIGTRAPすることをcrash reportから確認。`plugins/with-scene-lifecycle.cjs`でインストール済みExpoの公式SceneDelegate/イベント転送を使うよう修正し、冪等性テストを追加。ビルドとruntime結果は追記します。
+- 独立した診断DBでSQLCipher保存/再接続/再起動/鍵喪失拒否を検証するdev-only画面を追加。リリース/demo以外では作動しません。通常の本文/認証鍵とは別の名前空間です。

@@ -149,7 +149,17 @@ export default function Home() {
         <Body muted>
           本人メールの確認、宛先の承諾、年間プラン、自分宛の通知テスト、送信条件の確認が必要です。
         </Body>
-        <Action label="見守りの有効化 · 接続準備中" disabled onPress={() => {}} />
+        <Action
+          label={
+            state?.state === "draft"
+              ? "条件を確認して見守りを始める"
+              : "条件を確認して見守りを再開する"
+          }
+          disabled={mode !== "api" || !state || !["draft", "paused", "held"].includes(state.state)}
+          onPress={() => router.push("/activate")}
+        />
+        <Row title="本人メールの確認" onPress={() => router.push("/contact")} />
+        <Row title="自分宛の通知テスト・配信状態" onPress={() => router.push("/deliveries")} />
         <Notice>課金の失敗や契約切れを理由に、伝言を送ることはありません。</Notice>
       </Section>
       <Row title="仕組みと大切なこと" onPress={() => router.push("/about")} />

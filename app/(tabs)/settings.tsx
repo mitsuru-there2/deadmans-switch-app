@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Linking, Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import { router } from "expo-router";
 import { Action, Body, Input, Notice, Row, Screen, Section, Title } from "../../src/components/ui";
 import { useData } from "../../src/services/data";
@@ -7,7 +7,7 @@ import { gateway } from "../../src/api/adapter";
 import { mode } from "../../src/api/config";
 import { errorText } from "../../src/api/errors";
 import { editable, formatDate, settingsInputSchema, type Switch } from "../../src/domain/models";
-import { notificationSetup, requestNotificationPermission } from "../../src/services/notifications";
+import { NotificationSettings } from "../../src/components/NotificationSettings";
 import { storageDescription, clearPrivate } from "../../src/storage/vault";
 import { useQueryClient } from "@tanstack/react-query";
 export default function Settings() {
@@ -20,7 +20,9 @@ export default function Settings() {
       try {
         await clearPrivate();
         await client.invalidateQueries();
-        setNotice(`${localDataName}を削除しました。サーバーのデータやストア契約は変更していません。`);
+        setNotice(
+          `${localDataName}を削除しました。サーバーのデータやストア契約は変更していません。`,
+        );
       } catch (e) {
         setNotice(errorText(e));
       }
@@ -56,42 +58,12 @@ export default function Settings() {
       <Section title="本人の連絡先">
         <Row
           title="本人メール"
-          detail={
-            me.data?.user.emailVerified
-              ? (me.data.user.email ?? "確認済み")
-              : "未確認 · メール確認の接続準備中"
-          }
+          detail={me.data?.user.emailVerified ? (me.data.user.email ?? "確認済み") : "未確認"}
         />
-        <Notice>確認メールの送信とリンク処理は、検証用 API との接続後に利用できます。</Notice>
+        <Action label="本人メールを確認する" secondary onPress={() => router.push("/contact")} />
+        <Row title="自分宛の通知テスト・配信状態" onPress={() => router.push("/deliveries")} />
       </Section>
-      <Section title="通知">
-        <Notice>{notificationSetup}</Notice>
-        <Action
-          label="この端末の通知を許可する"
-          secondary
-          disabled={Platform.OS === "web" || mode === "unconfigured"}
-          onPress={async () => {
-            try {
-              const status = await requestNotificationPermission();
-              setNotice(
-                status === "granted"
-                  ? "端末の通知は許可済みです。サーバーへの通知登録は未完了です。"
-                  : "通知は許可されていません。OS の設定から変更できます。",
-              );
-            } catch (e) {
-              setNotice(errorText(e));
-            }
-          }}
-        />
-        <Action
-          label="OS の設定を開く"
-          secondary
-          disabled={Platform.OS === "web"}
-          onPress={() => {
-            void Linking.openSettings().catch(() => setNotice("OS の設定を開けませんでした。"));
-          }}
-        />
-      </Section>
+      <NotificationSettings />
       <Section title="年間プラン">
         <Body>
           {me.data?.switch.entitlement

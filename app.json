@@ -9,21 +9,43 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "jp.example.watashini.dev",
-      "infoPlist": { "ITSAppUsesNonExemptEncryption": true }
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": true
+      }
     },
-    "android": { "package": "jp.example.watashini.dev", "allowBackup": false },
-    "web": { "output": "single" },
+    "android": {
+      "package": "jp.example.watashini.dev",
+      "allowBackup": false
+    },
+    "web": {
+      "output": "single"
+    },
     "plugins": [
       "expo-router",
       "expo-dev-client",
-      ["expo-sqlite", { "useSQLCipher": true }],
-      ["expo-secure-store", { "configureAndroidBackup": true }],
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
       [
         "expo-local-authentication",
-        { "faceIDPermission": "あなたの伝言を開くために Face ID を使います。" }
+        {
+          "faceIDPermission": "あなたの伝言を開くために Face ID を使います。"
+        }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "./plugins/with-scene-lifecycle.cjs"
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }
