@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "私に何かあったら",
+    "slug": "watashi-ni-nanika-attara",
+    "scheme": "watashi-ni-nanika-attara",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "jp.example.watashini.dev",
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": true }
+    },
+    "android": { "package": "jp.example.watashini.dev", "allowBackup": false },
+    "web": { "output": "single" },
+    "plugins": [
+      "expo-router",
+      "expo-dev-client",
+      ["expo-sqlite", { "useSQLCipher": true }],
+      ["expo-secure-store", { "configureAndroidBackup": true }],
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "あなたの伝言を開くために Face ID を使います。" }
+      ],
+      "expo-notifications"
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}
