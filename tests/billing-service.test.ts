@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const { loader } = createRequire(import.meta.url)("./review-harness.cjs");
 const uuid = "11111111-1111-4111-8111-111111111111";
-function service(configured: boolean) {
+function service(
+  configured: boolean,
+  hooks: { onWrite?: () => Promise<void>; onPurchase?: () => Promise<void> } = {},
+) {
   const events: string[] = [];
   const values = new Map<string, string>();
   const state = {
@@ -11,6 +14,8 @@ function service(configured: boolean) {
     cancelled: false,
     loseResponse: false,
     missingToken: false,
+    appState: "active",
+    generation: 1,
   };
   let configuredSDK = false;
   const product = { identifier: "annual", subscriptionPeriod: "P1Y" };
@@ -34,6 +39,7 @@ function service(configured: boolean) {
     getProducts: async () => [product],
     purchaseStoreProduct: async () => {
       events.push("purchase");
+      await hooks.onPurchase?.();
       if (state.pending) throw { code: "pending" };
       if (state.cancelled) throw { code: "cancelled" };
       return {
@@ -50,13 +56,18 @@ function service(configured: boolean) {
   };
   const mocks = {
     "../services/foreground": {
-      foregroundAuthority: { current: () => 1, valid: () => true },
+      foregroundAuthority: {
+        current: () => state.generation,
+        valid: (generation: number) =>
+          generation === state.generation && state.appState === "active",
+      },
     },
     "expo-secure-store": {
       WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1,
       getItemAsync: async (key: string) => values.get(key) ?? null,
       setItemAsync: async (key: string, value: string) => {
         values.set(key, value);
+        await hooks.onWrite?.();
       },
       deleteItemAsync: async (key: string) => {
         values.delete(key);
@@ -74,7 +85,11 @@ function service(configured: boolean) {
     },
     "react-native": {
       Platform: { OS: "android" },
-      AppState: { currentState: "active" },
+      AppState: {
+        get currentState() {
+          return state.appState;
+        },
+      },
     },
     "../api/config": { apiUrl: "https://mock.invalid", mode: "api" },
     "../api/adapter": {
@@ -199,4 +214,61 @@ test("cancelled purchase clears latch; normal success verifies and refreshes bef
   });
   assert.equal(f.values.size, 0);
   assert.deepEqual(f.events.slice(-3), ["purchase", "verify", "refresh"]);
+});
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+test("background during pending write clears an undispatched purchase and permits a fresh attempt", async () => {
+  const written = deferred(),
+    finishWrite = deferred();
+  const f = service(true, {
+    onWrite: async () => {
+      written.resolve();
+      await finishWrite.promise;
+    },
+  });
+  const attempt = f.api.buy(f.product, async () => {});
+  await written.promise;
+  f.state.appState = "background";
+  f.state.generation++;
+  finishWrite.resolve();
+  await assert.rejects(attempt, /BILLING_INTERRUPTED/);
+  assert.equal(f.events.filter((event) => event === "purchase").length, 0);
+  assert.equal(f.values.size, 0, "no purchase exists to resolve through store proofs");
+  f.state.appState = "active";
+  f.state.generation++;
+  await f.api.buy(f.product, async () => {});
+  assert.equal(f.events.filter((event) => event === "purchase").length, 1);
+  assert.equal(f.values.size, 0);
+});
+test("background after SDK dispatch with an unknown result preserves pending and blocks another purchase", async () => {
+  const dispatched = deferred(),
+    finishPurchase = deferred();
+  const f = service(true, {
+    onPurchase: async () => {
+      dispatched.resolve();
+      await finishPurchase.promise;
+      throw new Error("SDK response lost");
+    },
+  });
+  const attempt = f.api.buy(f.product, async () => {});
+  await dispatched.promise;
+  f.state.appState = "background";
+  f.state.generation++;
+  finishPurchase.resolve();
+  await assert.rejects(attempt, /STORE_UNAVAILABLE/);
+  assert.equal(f.events.filter((event) => event === "purchase").length, 1);
+  assert.equal(f.values.size, 1);
+  f.state.appState = "active";
+  f.state.generation++;
+  await assert.rejects(
+    f.api.buy(f.product, async () => {}),
+    /PURCHASE_UNRESOLVED/,
+  );
+  assert.equal(f.events.filter((event) => event === "purchase").length, 1);
 });

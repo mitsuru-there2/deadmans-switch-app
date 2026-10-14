@@ -130,19 +130,23 @@ export async function buy(product: PurchasesStoreProduct, refresh: () => Promise
     await identify(account.accountToken);
     authorize();
     if (revision !== identityRevision()) throw new AppError("UNAUTHORIZED");
-    await SecureStore.setItemAsync(
-      pendingKey(account.accountToken),
-      JSON.stringify({ origin: apiUrl, accountToken: account.accountToken }),
-      {
-        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-      },
-    );
-    authorize();
+    let purchaseStarted = false;
     try {
+      await SecureStore.setItemAsync(
+        pendingKey(account.accountToken),
+        JSON.stringify({ origin: apiUrl, accountToken: account.accountToken }),
+        {
+          keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        },
+      );
+      authorize();
       await completePurchase(
         {
           purchase: async () => {
             try {
+              // From this point, even a synchronous SDK error can have an unknown
+              // outcome. Only a confirmed cancellation permits clearing the latch.
+              purchaseStarted = true;
               return (await Purchases.purchaseStoreProduct(product)).transaction;
             } catch (e) {
               throw safeStoreError(e);
@@ -155,7 +159,7 @@ export async function buy(product: PurchasesStoreProduct, refresh: () => Promise
       );
       await clearPending(account.accountToken);
     } catch (error) {
-      if (error instanceof AppError && error.code === "PURCHASE_CANCELLED")
+      if (!purchaseStarted || (error instanceof AppError && error.code === "PURCHASE_CANCELLED"))
         await clearPending(account.accountToken);
       throw error;
     }
