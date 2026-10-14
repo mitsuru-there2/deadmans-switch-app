@@ -133,3 +133,4 @@ async function staleUnlockAfterRelock() {
   assert.equal(states[0],false);assert.equal(calls,0);
 }
 module.exports={checkinWhileBackground,templateDuringSave,adoptsOtherWriterVersion,staleUnlockAfterRelock};
+module.exports.loader = loader;

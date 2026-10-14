@@ -2,8 +2,8 @@ node_modules/
 .expo/
 dist/
 web-build/
-ios/
-android/
+/ios/
+/android/
 .env*
 !.env.example
 *.log
@@ -15,3 +15,7 @@ coverage/
 
 expo-env.d.ts
 # @end expo-cli
+# Local native-module sources are tracked; only their generated outputs are ignored.
+modules/**/android/build/
+modules/**/android/.gradle/
+modules/**/android/.cxx/

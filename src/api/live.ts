@@ -1,5 +1,10 @@
 import { createApiClient } from "deadmans-switch-api/client";
 import {
+  billingAccountSchema,
+  entitlementSchema,
+  subscriptionsResponseSchema,
+  type BillingAccount,
+  type SubscriptionsResponse,
   currentConsentSchema,
   deliveriesResponseSchema,
   devicesResponseSchema,
@@ -18,7 +23,12 @@ import {
   type MessageInput,
   type RecipientInput,
 } from "../domain/models.ts";
+export type PurchaseProof =
+  { store: "apple"; transactionId: string } | { store: "google"; purchaseToken: string };
 export interface Gateway {
+  billingAccount(): Promise<BillingAccount>;
+  subscriptions(): Promise<SubscriptionsResponse>;
+  verifyPurchase(proof: PurchaseProof): Promise<void>;
   requestContact(input: RecipientInput): Promise<void>;
   confirmContact(token: string): Promise<void>;
   invite(id: string): Promise<void>;
@@ -63,6 +73,15 @@ export function createLiveGateway(
 ): Gateway {
   const rpc = createApiClient(baseUrl, options);
   return {
+    billingAccount: async () =>
+      billingAccountSchema.parse(await decode(rpc.v1.billing.account.$get())),
+    subscriptions: async () =>
+      subscriptionsResponseSchema.parse(await decode(rpc.v1.billing.subscriptions.$get())),
+    verifyPurchase: async (proof) => {
+      z.union([entitlementSchema, z.object({ received: z.literal(true) }).strict()]).parse(
+        await decode(rpc.v1.billing.verify.$post({ json: proof })),
+      );
+    },
     requestContact: async (input) => {
       await decode(rpc.v1["contact-email"].$post({ json: input }));
     },
@@ -77,7 +96,9 @@ export function createLiveGateway(
     selfTest: async () => selfTestResponseSchema.parse(await decode(rpc.v1["self-test"].$post())),
     activate: async (version, consentVersion) => {
       await decode(
-        rpc.v1.switch.activate.$post({ json: { version, consentVersion, confirmed: true } }),
+        rpc.v1.switch.activate.$post({
+          json: { version, consentVersion, confirmed: true },
+        }),
       );
     },
     devices: async () => devicesResponseSchema.parse(await decode(rpc.v1.devices.$get())).devices,
@@ -95,26 +116,40 @@ export function createLiveGateway(
       z.object({ messages: z.array(messageSchema) }).parse(await decode(rpc.v1.messages.$get()))
         .messages,
     addRecipient: async (input, version) => {
-      await decode(rpc.v1.recipients.$post({ json: { ...input, channel: "email", version } }));
+      await decode(
+        rpc.v1.recipients.$post({
+          json: { ...input, channel: "email", version },
+        }),
+      );
     },
     removeRecipient: async (id, version) => {
       await decode(rpc.v1.recipients[":id"].$delete({ param: { id }, json: { version } }));
     },
     saveMessage: async (id, input, version) => {
-      return z.object({ version: z.number().int().positive() }).parse(await decode(
-        rpc.v1.recipients[":id"].message.$put({ param: { id }, json: { ...input, version } }),
-      ));
+      return z.object({ version: z.number().int().positive() }).parse(
+        await decode(
+          rpc.v1.recipients[":id"].message.$put({
+            param: { id },
+            json: { ...input, version },
+          }),
+        ),
+      );
     },
     settings: async (inactivityDays, graceDays, version) => {
       await decode(rpc.v1.switch.$patch({ json: { inactivityDays, graceDays, version } }));
     },
     checkIn: async (kind, authorizeSend) => {
-      await decode(rpc.v1["check-ins"].$post({ json: { kind } }, {
-        fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-          authorizeSend();
-          return (options?.fetch ?? fetch)(input, init);
-        },
-      }));
+      await decode(
+        rpc.v1["check-ins"].$post(
+          { json: { kind } },
+          {
+            fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+              authorizeSend();
+              return (options?.fetch ?? fetch)(input, init);
+            },
+          },
+        ),
+      );
     },
     pause: async () => {
       await decode(rpc.v1.switch.pause.$post());

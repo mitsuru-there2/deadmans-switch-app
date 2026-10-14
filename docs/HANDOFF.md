@@ -6,11 +6,11 @@
 
 - API `client` export を file 依存で利用。`src/api/adapter.ts` の Gateway が画面との境界。API 購読は TanStack Query、本文/宛先の入力は TanStack Form + Zod。新規のテストフレームワーク、Sentry は追加していません。
 - 最新 API `b52e61a` の serverTime / activationBlockers、招待期限、GET consents/current / GET devices に対応。全文同意とversion付きactivate（開始/再開）、明示停止まで接続済みです。表示・チェックイン・課金復元だけでは再開しません。
-- 本人メール登録・確認リンクの手動貼付、招待/再招待/状態、本人宛テストと配信履歴、通知 token 登録/更新/削除を接続済み。本人操作だけで許可を要求。EAS/APNs/FCM未設定時は無効。購入と同一ストア復元、通知アクション、アカウントexport/削除、検証済みメール変更、監査履歴は未接続です。
+- 本人メール登録・確認リンクの手動貼付、招待/再招待/状態、本人宛テストと配信履歴、通知 token 登録/更新/削除を接続済み。本人操作だけで許可を要求。EAS/APNs/FCM未設定時は無効。購入と同一ストア復元は後述の第3区切りでコード接続済みです。通知アクション、アカウントexport/削除、検証済みメール変更、監査履歴は未接続です。
 - Self-test を接続する場合は 202 の deliveryId を記録し、accepted/delivered まで成功扱いしないこと。invitation の queued も配信/承諾とは別です。
-- RevenueCat SDK は導入しましたが configure/purchase/restore は実行しません。API側はAndroidのBase64(SHA-256(UUID))とUUIDの厳格照合を追加済み。Apple JWS / Google purchaseToken取得のExpo local moduleと復旧の順序を次の区切りで実装可能です。`docs/NATIVE-PROOF-PLAN.md` を参照。CustomerInfo / appUserID / transactionIdentifier だけで旧アカウント復旧を許しません。API 担当の docs/app-contract.md を継続参照してください。
+- RevenueCat＋読み取り専用Expo local moduleをコード接続済みです。実SDKのconfigure/purchase/restore操作は未実施です。API側はAndroidのBase64(SHA-256(UUID))とUUIDの厳格照合に対応。`docs/NATIVE-PROOF-PLAN.md` を参照。CustomerInfo / appUserID / transactionIdentifier だけで旧アカウント復旧を許しません。API 担当の docs/app-contract.md を継続参照してください。
 - Universal Links / App Links の許可ドメインは未設定です。現在は開発用 scheme のみ。秘密トークンを URL query やログへ転記する復旧処理はありません。
-- app.json の bundleIdentifier / package は **開発用仮値** `jp.example.watashini.dev`。ストア登録済み ID、EAS projectId、通知 credential、ストア商品、RevenueCat 公開 SDK key と native proof bridge は公開前に設定が必要です。秘密 API キーを EXPO_PUBLIC_* に入れないこと。
+- app.json の bundleIdentifier / package は **開発用仮値** `jp.example.watashini.dev`。ストア登録済み ID、EAS projectId、通知 credential、ストア商品、RevenueCat 公開 SDK key は公開前に設定が必要です。秘密 API キーを EXPO_PUBLIC_* に入れないこと。
 - 未契約のローカル試し書き許可が未確定のため、API モードの未契約アカウントは宛先/本文作成を止めます。試し書きは開発デモで可能です。
 - 端末暗号化は SQLCipher を採用。OS のファイル保護のみより秘密内容の DB 抽出に強く、項目ごとの自前暗号より nonce/暗号化漏れを減らせます。Expo Go 非対応で dev build 必須。鍵紛失時は DB を読みません。iOS バックアップの明示除外、Android 実機での鍵失効、再インストール/復元の検証は未完了です。
 
@@ -54,3 +54,12 @@ iOS27 Simulatorで通常ホームを描画し、NativeTabsとExpo UIボタン、
 - 独立した診断DBでSQLCipher保存/再接続/再起動/鍵喪失拒否を検証するdev-only画面を追加。リリース/demo以外では作動しません。通常の本文/認証鍵とは別の名前空間です。
 
 主要フローのコミット: `e91ceda`（main）。APIの追加修正45e56ac/e087a7aについては、次の購入ブリッジ接続時に契約を再確認してください。
+
+
+## 第3区切り: 購入連携と独立レビュー修正
+
+- `8417655`: 認証/チェックインの世代を背景化で失効し、auth header解決後・送信直前に再検査。伝言保存は保存APIの返却versionを採用。保存中の全編集入口を止め、送信snapshotが現在内容と一致した場合だけdirty解除・下書き削除。4再現シナリオとsnapshot保持を回帰テスト化。
+- 購入・同一ストア復元を実装。最新API基準 `e087a7a`。StoreKit2 JWS/BillingClient purchaseToken、RevenueCatのUUID連携、サーバー再検証と状態再取得、結果不明時の重複購入防止、fresh復元認証、SecureStore一括切替、古い画面/キャッシュ破棄を実装。実購入・新規認証情報発行・外部設定は未実施。
+- ローカル型検査、29件のNodeテスト、3プラットフォームexport成功。iOS/Androidのnative module込みビルド成功。Web DOMで未設定状態と購入/復元操作無効を確認。iOSは通常ホーム起動成功、購入画面へのOSリンク確認のAX取得が失敗して同画面は未検証。
+- 復元の結果再取得契約は不足しており、応答喪失/最終Keychain書込失敗では安全側に停止します。別bootstrap・旧Bearer再利用で回避しません。RevenueCatの購入移転設定・実挙動、実機sandboxの署名/所有者照合は未検証です。
+- 実装詳細は[購入証明](NATIVE-PROOF-PLAN.md)、外部設定と実機試験の最小手順は[公開前検証](RELEASE-VALIDATION.md)。

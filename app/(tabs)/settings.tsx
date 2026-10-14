@@ -74,7 +74,7 @@ export default function Settings() {
           <Notice>内部権利期限: {formatDate(me.data.switch.entitlement.validUntil)}</Notice>
         )}
         <Notice>基本 10 宛先 / 拡張 50 宛先。価格・更新条件はストアでの設定後に表示します。</Notice>
-        <Action label="購入・同じストアの復元 · 接続準備中" disabled onPress={() => {}} />
+        <Action label="年間プラン・同じストアの復元" onPress={() => router.push("/billing")} />
         <Notice>
           課金失敗では伝言を送りません。購入復元だけではチェックインや監視再開になりません。
         </Notice>

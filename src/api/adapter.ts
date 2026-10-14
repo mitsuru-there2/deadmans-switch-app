@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import { apiUrl, mode } from "./config";
 import { AppError } from "./errors";
-import { getSession } from "./session";
+import { getSession, identityRevision } from "./session";
 import { createLiveGateway, type Gateway } from "./live";
 import type { Me, Recipient, Message } from "../domain/models";
 import { readPrivate, writePrivate } from "../storage/vault";
@@ -12,8 +12,15 @@ const live = createLiveGateway(apiUrl ?? "https://unconfigured.invalid", {
   },
   fetch: async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     try {
-      return await fetch(input, { ...init, signal: AbortSignal.timeout(15000) });
-    } catch {
+      const revision = identityRevision();
+      const response = await fetch(input, {
+        ...init,
+        signal: AbortSignal.timeout(15000),
+      });
+      if (revision !== identityRevision()) throw new AppError("UNAUTHORIZED");
+      return response;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
       throw new AppError("NETWORK");
     }
   },
@@ -62,6 +69,9 @@ const demoUnavailable = async (): Promise<never> => {
   throw new AppError("DEMO_ONLY");
 };
 const demo: Gateway = {
+  billingAccount: demoUnavailable,
+  subscriptions: demoUnavailable,
+  verifyPurchase: demoUnavailable,
   requestContact: demoUnavailable,
   confirmContact: demoUnavailable,
   invite: demoUnavailable,

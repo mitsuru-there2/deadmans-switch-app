@@ -1,0 +1,14 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'jp.example.storeproof'
+version = '0.1.0'
+android {
+  namespace 'jp.example.storeproof'
+  defaultConfig { versionCode 1; versionName '0.1.0' }
+}
+dependencies {
+  // Matches purchases-android 10.27.0. Do not upgrade independently of RevenueCat.
+  implementation 'com.android.billingclient:billing:8.3.0'
+}

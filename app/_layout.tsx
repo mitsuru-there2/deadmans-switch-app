@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+import { identityRevision, subscribeIdentity } from "../src/api/session";
 import { StorageDiagnostic } from "../src/components/StorageDiagnostic";
 import { mode } from "../src/api/config";
 import { Stack } from "expo-router";
@@ -14,6 +16,7 @@ const queryClient = new QueryClient({
 });
 export default function Layout() {
   const p = usePalette();
+  const revision = useSyncExternalStore(subscribeIdentity, identityRevision, identityRevision);
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
@@ -23,6 +26,7 @@ export default function Layout() {
             <StorageDiagnostic />
           ) : (
             <Stack
+              key={revision}
               screenOptions={{
                 headerStyle: { backgroundColor: p.bg },
                 headerTintColor: p.accent,
@@ -38,6 +42,7 @@ export default function Layout() {
               />
               <Stack.Screen name="message/[id]" options={{ title: "伝言を編集" }} />
               <Stack.Screen name="recipient/[id]" options={{ title: "宛先の状態" }} />
+              <Stack.Screen name="billing" options={{ title: "年間プランと復元" }} />
               <Stack.Screen name="contact" options={{ title: "本人メール" }} />
               <Stack.Screen name="activate" options={{ title: "見守りの条件" }} />
               <Stack.Screen name="deliveries" options={{ title: "通知と配信" }} />

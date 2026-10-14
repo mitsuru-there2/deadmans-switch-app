@@ -61,11 +61,11 @@ SQLite の平文を既定にしません。`expo-sqlite` の SQLCipher を prebu
 
 API origin と user ID ごとに下書きを分離し、デモの DB も API モードから分離します。API モードは端末の認証が必要です。バックグラウンド時に画面を隠し、未保存の編集はロック中もメモリ上に保持します。生体認証がなくても OS のパスコードを利用でき、両方ない場合は開きません。端末認証をサーバーの本人証明とは呼びません。ScreenCapture を抑止しますが、OS ごとのスクリーンショット・アプリ切替スナップショットの保証には実機検証が必要です。
 
-端末トークンは期限前に直列更新します。bootstrap / 更新の応答を失った場合に備え、開始前に pending を記録し、同じ操作を自動リプレイしたり別アカウントを作ったりしません。購入証明による復旧の接続は未完了です。伝言本文・メール・秘密 URL・Bearer のアプリログは追加していません。
+端末トークンは期限前に直列更新します。bootstrap / 更新の応答を失った場合に備え、開始前に pending を記録し、同じ操作を自動リプレイしたり別アカウントを作ったりしません。購入証明による復旧は接続済みですが、結果不明時の再取得・補助復旧は未接続です。伝言本文・メール・秘密 URL・Bearer のアプリログは追加していません。
 
 ## 未完了の機能と設定
 
-[docs/HANDOFF.md](docs/HANDOFF.md) に契約依存、機能の未完了状態、検証結果を記載しています。購入と購入による復旧は接続準備中です。本人確認・招待・通知テスト・有効化は既存APIへ接続するコードを実装し、外部送信なしのモックで検証しました。実通知・実購入をしていません。
+[docs/HANDOFF.md](docs/HANDOFF.md) に契約依存、機能の未完了状態、検証結果を記載しています。購入と同一ストア復元はコード接続済みです。外部設定がない環境では無効になります。[購入証明](docs/NATIVE-PROOF-PLAN.md) と [外部設定・実機検証の最小手順](docs/RELEASE-VALIDATION.md) を参照してください。本人確認・招待・通知テスト・有効化は既存APIへ接続するコードを実装し、外部送信なしのモックで検証しました。実通知・実購入をしていません。
 
 SDK 57 と Expo UI 57 は公式の対応バージョンを `expo install` で解決しました。
 
@@ -80,3 +80,5 @@ SDK 57 と Expo UI 57 は公式の対応バージョンを `expo install` で解
 Xcode 27のScene lifecycle要件に対し、`plugins/with-scene-lifecycle.cjs` でExpo自身の `ExpoAppSceneDelegate` を使います。生成されたAppDelegateに独自のUIWindowを作らず、Expoのイベント転送を保持します。
 
 ネイティブ保存の専用診断は `EXPO_PUBLIC_APP_MODE=demo EXPO_PUBLIC_STORAGE_DIAGNOSTIC=1 npm start -- --port 8082`。development buildでのみ有効です。Phase1の後プロセスを終了・再起動し、Phase2で鍵喪失時の拒否を確認します。専用の架空DBと鍵だけを使い、通常の下書きには触れません。診断終了後は環境変数を外して再起動してください。Webでは実行しません。
+
+購入の明示的な有効化には `.env.example` の `EXPO_PUBLIC_BILLING_ENABLED` とOS別のRevenueCat公開SDKキー、APIの対応商品設定が必要です。`modules/store-proof` はネイティブソースとして管理し、初回追加・変更後はpod install/ネイティブ再ビルドが必要です。JWSやpurchaseTokenはログ・SQLite・URLへ保存しません。

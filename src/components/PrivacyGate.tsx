@@ -1,4 +1,5 @@
 import { foregroundAuthority } from "../services/foreground";
+import { suppressBillingCheckIn } from "../billing/service";
 import { useEffect, useState, type PropsWithChildren } from "react";
 import { AppState, Platform, View, StyleSheet } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,7 +23,10 @@ export function PrivacyGate({ children }: PropsWithChildren) {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active" && mode === "api") setOpened(false);
     });
-    return () => { sub.remove(); foregroundAuthority.lock(); };
+    return () => {
+      sub.remove();
+      foregroundAuthority.lock();
+    };
   }, []);
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -40,7 +44,12 @@ export function PrivacyGate({ children }: PropsWithChildren) {
         <View
           style={[
             StyleSheet.absoluteFill,
-            { justifyContent: "center", padding: 28, gap: 24, backgroundColor: p.bg },
+            {
+              justifyContent: "center",
+              padding: 28,
+              gap: 24,
+              backgroundColor: p.bg,
+            },
           ]}
         >
           <Title>私に何かあったら</Title>
@@ -61,7 +70,11 @@ export function PrivacyGate({ children }: PropsWithChildren) {
                   setOpened(true);
                   try {
                     const me = await gateway.me();
-                    if (foregroundAuthority.valid(generation) && entitled(me.switch))
+                    if (
+                      !suppressBillingCheckIn() &&
+                      foregroundAuthority.valid(generation) &&
+                      entitled(me.switch)
+                    )
                       await foregroundCheckIn("unlock", generation);
                     client.setQueryData(["foreground-error"], "");
                     await client.invalidateQueries();
