@@ -1,3 +1,4 @@
+import { foregroundAuthority } from "../services/foreground";
 import { useEffect, useState, type PropsWithChildren } from "react";
 import { AppState, Platform, View, StyleSheet } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ export function PrivacyGate({ children }: PropsWithChildren) {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active" && mode === "api") setOpened(false);
     });
-    return () => sub.remove();
+    return () => { sub.remove(); foregroundAuthority.lock(); };
   }, []);
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
@@ -53,14 +54,15 @@ export function PrivacyGate({ children }: PropsWithChildren) {
             disabled={busy || Platform.OS === "web"}
             onPress={async () => {
               setBusy(true);
+              const generation = foregroundAuthority.beginUnlock();
               try {
-                if (await unlock()) {
+                if ((await unlock()) && foregroundAuthority.completeUnlock(generation)) {
                   setMounted(true);
                   setOpened(true);
                   try {
                     const me = await gateway.me();
-                    if (entitled(me.switch) && AppState.currentState === "active")
-                      await foregroundCheckIn("unlock");
+                    if (foregroundAuthority.valid(generation) && entitled(me.switch))
+                      await foregroundCheckIn("unlock", generation);
                     client.setQueryData(["foreground-error"], "");
                     await client.invalidateQueries();
                   } catch (e) {

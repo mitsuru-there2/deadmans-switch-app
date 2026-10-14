@@ -6,6 +6,7 @@ export class AppError extends Error {
   }
 }
 const copy: Record<string, string> = {
+  STALE_CHECKIN_INTENT: "画面がロックされたため、未送信の確認操作を破棄しました。解除後に改めて確認してください。",
   NOTIFICATIONS_UNCONFIGURED: "通知の配信設定が未完了です。まだ登録されていません。",
   NOTIFICATIONS_DENIED: "通知は許可されていません。必要な場合は OS の設定で許可してください。",
   DEVICE_LIMIT: "通知は最大5端末です。不要な登録を解除してから登録してください。",

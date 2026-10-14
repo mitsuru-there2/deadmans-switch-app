@@ -3,12 +3,20 @@ import { gateway } from "../api/adapter";
 import { mode } from "../api/config";
 import { AppError } from "../api/errors";
 import { mayCheckIn } from "../domain/checkin";
-let current: Promise<void> | undefined;
-export function foregroundCheckIn(intent: "unlock" | "button") {
-  if (!mayCheckIn({ mode, appState: AppState.currentState, authenticated: true, intent }))
-    return Promise.reject(new AppError("DEMO_ONLY"));
-  // Deduplicate simultaneous foreground events. No queue or retry survives this promise.
-  return (current ??= gateway.checkIn("foreground").finally(() => {
-    current = undefined;
-  }));
+import { foregroundAuthority } from "./foreground";
+let current: { generation: number; promise: Promise<void> } | undefined;
+export function foregroundCheckIn(intent: "unlock" | "button", generation = foregroundAuthority.current()) {
+  const authorizeSend = () => {
+    if (!mayCheckIn({ mode, appState: AppState.currentState, authenticated: foregroundAuthority.valid(generation), intent }))
+      throw new AppError("STALE_CHECKIN_INTENT");
+  };
+  try { authorizeSend(); } catch (e) { return Promise.reject(e); }
+  if (current?.generation === generation) return current.promise;
+  // The gateway checks again after async auth-header resolution, immediately
+  // before dispatch. Already dispatched HTTP requests cannot be recalled.
+  const promise = gateway.checkIn("foreground", authorizeSend).finally(() => {
+    if (current?.promise === promise) current = undefined;
+  });
+  current = { generation, promise };
+  return promise;
 }

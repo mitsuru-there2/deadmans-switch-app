@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { savedSnapshotState, matchesSnapshot } from "../../src/domain/editor-save";
+import { useRef, useState } from "react";
 import { Alert, Platform, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -101,6 +102,9 @@ function Editor({
   );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const writing = useRef(false);
+  const latestVersion = useRef(version);
+  latestVersion.current = version;
   const [preview, setPreview] = useState(false);
   const [template, setTemplate] = useState<WritingTemplate | null>(null);
   const [questions, setQuestions] = useState(false);
@@ -123,11 +127,14 @@ function Editor({
       );
   });
   const change = (field: "title" | "body", value: string) => {
+    if (writing.current || !canEdit) return;
     form.setFieldValue(field, value);
     setDirty(true);
     setNotice("未保存の変更があります");
   };
   const persist = async (sync: boolean) => {
+    if (writing.current || !canEdit) return;
+    writing.current = true;
     setError("");
     setBusy(true);
     const value = { title: form.state.values.title, body: form.state.values.body };
@@ -145,11 +152,18 @@ function Editor({
           baseVersion,
           updatedAt: Date.now(),
         });
-        if (baseVersion !== version) throw new AppError("VERSION_CONFLICT");
-        await gateway.saveMessage(recipient.id, parsed.data, baseVersion);
-        const updated = await gateway.me();
-        setBaseVersion(updated.switch.version);
-        await deleteDraft(scope, recipient.id);
+        if (baseVersion !== latestVersion.current) throw new AppError("VERSION_CONFLICT");
+        const result = await gateway.saveMessage(recipient.id, parsed.data, baseVersion);
+        const completed = savedSnapshotState(value, form.state.values, result.version);
+        setBaseVersion(completed.baseVersion);
+        if (completed.clearDraft) await deleteDraft(scope, recipient.id);
+        else {
+          await saveDraft(scope, { ...form.state.values, recipientId: recipient.id, baseVersion: result.version, updatedAt: Date.now() });
+          setDirty(true);
+          setNotice("送信後の変更は端末の下書きに残しました。再確認して保存してください。");
+          await client.invalidateQueries();
+          return;
+        }
         setNotice(
           mode === "demo"
             ? "デモの伝言を端末に保存しました。サーバーには送られていません。"
@@ -165,17 +179,20 @@ function Editor({
         setNotice("端末に下書きを保存しました。サーバーにはまだ同期されていません。");
       }
       setBaseline(value);
-      setDirty(false);
+      setDirty(!matchesSnapshot(form.state.values, value));
       await client.invalidateQueries();
     } catch (e) {
       setError(errorText(e));
       if (e instanceof AppError && e.code === "VERSION_CONFLICT") await client.invalidateQueries();
     } finally {
+      writing.current = false;
       setBusy(false);
     }
   };
   const remove = () => {
     const run = async () => {
+      if (writing.current || !canEdit) return;
+      writing.current = true;
       setBusy(true);
       try {
         await gateway.removeRecipient(recipient.id, version);
@@ -186,6 +203,7 @@ function Editor({
       } catch (e) {
         setError(errorText(e));
       } finally {
+        writing.current = false;
         setBusy(false);
       }
     };
@@ -227,9 +245,10 @@ function Editor({
           )}
           <Action
             label="最新の内容を確認したので、この編集を残す"
-            disabled={!showRemote}
+            disabled={!showRemote || busy}
             secondary
             onPress={() => {
+              if (writing.current) return;
               setBaseVersion(version);
               setNotice("次の保存で、現在の編集内容を反映します。");
             }}
@@ -294,6 +313,7 @@ function Editor({
                   title={t.title}
                   detail={t.hint}
                   onPress={() => {
+                    if (writing.current || !canEdit) return;
                     setTemplate(t);
                     setAnswers(t.questions.map(() => ""));
                     setQuestions(false);
@@ -312,13 +332,15 @@ function Editor({
                     value={answers[i] ?? ""}
                     multiline
                     maxLength={6000}
-                    onChangeText={(v) => setAnswers((old) => old.map((a, j) => (i === j ? v : a)))}
+                    editable={canEdit && !busy}
+                    onChangeText={(v) => { if (!writing.current && canEdit) setAnswers((old) => old.map((a, j) => (i === j ? v : a))); }}
                   />
                 ))}
                 <Action
                   label="伝言に追加して自由編集"
-                  disabled={!answers.some((a) => a.trim())}
+                  disabled={!canEdit || busy || !answers.some((a) => a.trim())}
                   onPress={() => {
+                    if (writing.current || !canEdit) return;
                     const next = [form.state.values.body, composeSection(template, answers)]
                       .filter(Boolean)
                       .join("\n\n");
@@ -330,7 +352,7 @@ function Editor({
                     setTemplate(null);
                   }}
                 />
-                <Action label="このお願いを取り消す" secondary onPress={() => setTemplate(null)} />
+                <Action label="このお願いを取り消す" secondary disabled={busy} onPress={() => { if (!writing.current) setTemplate(null); }} />
               </Section>
             </Reveal>
           )}

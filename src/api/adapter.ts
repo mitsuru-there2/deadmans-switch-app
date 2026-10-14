@@ -53,6 +53,7 @@ function demoChange(fn: (data: DemoData) => void, version: number) {
     fn(data);
     data.me.switch.version++;
     await writePrivate("demo-data", data);
+    return { version: data.me.switch.version };
   });
   demoQueue = result.catch(() => {});
   return result;
@@ -74,8 +75,8 @@ const demo: Gateway = {
   me: async () => (await demoRead()).me,
   recipients: async () => (await demoRead()).recipients,
   messages: async () => (await demoRead()).messages,
-  addRecipient: async (input, version) =>
-    demoChange((data) => {
+  addRecipient: async (input, version) => {
+    await demoChange((data) => {
       if (data.recipients.length >= 10) throw new AppError("SUBSCRIPTION_REQUIRED");
       data.recipients.push({
         ...input,
@@ -86,12 +87,14 @@ const demo: Gateway = {
         invitationExpiresAt: null,
         nextInvitationAt: null,
       });
-    }, version),
-  removeRecipient: async (id, version) =>
-    demoChange((data) => {
+    }, version);
+  },
+  removeRecipient: async (id, version) => {
+    await demoChange((data) => {
       data.recipients = data.recipients.filter((r) => r.id !== id);
       data.messages = data.messages.filter((m) => m.recipientId !== id);
-    }, version),
+    }, version);
+  },
   saveMessage: async (id, input, version) =>
     demoChange((data) => {
       const old = data.messages.find((m) => m.recipientId === id);
@@ -106,10 +109,11 @@ const demo: Gateway = {
         },
       ];
     }, version),
-  settings: async (inactivityDays, graceDays, version) =>
-    demoChange((data) => {
+  settings: async (inactivityDays, graceDays, version) => {
+    await demoChange((data) => {
       Object.assign(data.me.switch, { inactivityDays, graceDays });
-    }, version),
+    }, version);
+  },
   consent: async () => {
     throw new AppError("DEMO_ONLY");
   },

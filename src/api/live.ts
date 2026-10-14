@@ -33,9 +33,9 @@ export interface Gateway {
   messages(): Promise<Message[]>;
   addRecipient(input: RecipientInput, version: number): Promise<void>;
   removeRecipient(id: string, version: number): Promise<void>;
-  saveMessage(id: string, input: MessageInput, version: number): Promise<void>;
+  saveMessage(id: string, input: MessageInput, version: number): Promise<{ version: number }>;
   settings(inactivityDays: number, graceDays: number, version: number): Promise<void>;
-  checkIn(kind: "foreground" | "notification_action"): Promise<void>;
+  checkIn(kind: "foreground" | "notification_action", authorizeSend: () => void): Promise<void>;
   pause(): Promise<void>;
   consent(): Promise<{
     version: string;
@@ -101,15 +101,20 @@ export function createLiveGateway(
       await decode(rpc.v1.recipients[":id"].$delete({ param: { id }, json: { version } }));
     },
     saveMessage: async (id, input, version) => {
-      await decode(
+      return z.object({ version: z.number().int().positive() }).parse(await decode(
         rpc.v1.recipients[":id"].message.$put({ param: { id }, json: { ...input, version } }),
-      );
+      ));
     },
     settings: async (inactivityDays, graceDays, version) => {
       await decode(rpc.v1.switch.$patch({ json: { inactivityDays, graceDays, version } }));
     },
-    checkIn: async (kind) => {
-      await decode(rpc.v1["check-ins"].$post({ json: { kind } }));
+    checkIn: async (kind, authorizeSend) => {
+      await decode(rpc.v1["check-ins"].$post({ json: { kind } }, {
+        fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+          authorizeSend();
+          return (options?.fetch ?? fetch)(input, init);
+        },
+      }));
     },
     pause: async () => {
       await decode(rpc.v1.switch.pause.$post());
