@@ -8,6 +8,7 @@ import { mode } from "../api/config";
 import { errorText } from "../api/errors";
 import { gateway } from "../api/adapter";
 import { entitled } from "../domain/models";
+import { observeReminderActions, takeReminderIntent } from "../services/reminders";
 import { foregroundCheckIn } from "../services/checkin";
 import { unlock } from "../services/privacy";
 import { Action, Body, Notice, Title, usePalette } from "./ui";
@@ -28,6 +29,25 @@ export function PrivacyGate({ children }: PropsWithChildren) {
       foregroundAuthority.lock();
     };
   }, []);
+  useEffect(
+    () =>
+      observeReminderActions(() => {
+        const generation = foregroundAuthority.current();
+        if (!foregroundAuthority.valid(generation) || suppressBillingCheckIn()) return;
+        if (!takeReminderIntent()) return;
+        void foregroundCheckIn("notification_action", generation)
+          .then(() => {
+            client.setQueryData(["foreground-error"], "");
+          })
+          .catch((error) => {
+            client.setQueryData(["foreground-error"], errorText(error));
+          })
+          .finally(() => {
+            void client.invalidateQueries();
+          });
+      }),
+    [client],
+  );
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       {mounted && (
@@ -68,6 +88,7 @@ export function PrivacyGate({ children }: PropsWithChildren) {
                 if ((await unlock()) && foregroundAuthority.completeUnlock(generation)) {
                   setMounted(true);
                   setOpened(true);
+                  const notificationAction = takeReminderIntent();
                   try {
                     const me = await gateway.me();
                     if (
@@ -75,7 +96,10 @@ export function PrivacyGate({ children }: PropsWithChildren) {
                       foregroundAuthority.valid(generation) &&
                       entitled(me.switch)
                     )
-                      await foregroundCheckIn("unlock", generation);
+                      await foregroundCheckIn(
+                        notificationAction ? "notification_action" : "unlock",
+                        generation,
+                      );
                     client.setQueryData(["foreground-error"], "");
                     await client.invalidateQueries();
                   } catch (e) {

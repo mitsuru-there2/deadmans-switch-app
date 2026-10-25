@@ -82,3 +82,7 @@ Xcode 27のScene lifecycle要件に対し、`plugins/with-scene-lifecycle.cjs` �
 ネイティブ保存の専用診断は `EXPO_PUBLIC_APP_MODE=demo EXPO_PUBLIC_STORAGE_DIAGNOSTIC=1 npm start -- --port 8082`。development buildでのみ有効です。Phase1の後プロセスを終了・再起動し、Phase2で鍵喪失時の拒否を確認します。専用の架空DBと鍵だけを使い、通常の下書きには触れません。診断終了後は環境変数を外して再起動してください。Webでは実行しません。
 
 購入の明示的な有効化には `.env.example` の `EXPO_PUBLIC_BILLING_ENABLED` とOS別のRevenueCat公開SDKキー、APIの対応商品設定が必要です。`modules/store-proof` はネイティブソースとして管理し、初回追加・変更後はpod install/ネイティブ再ビルドが必要です。JWSやpurchaseTokenはログ・SQLite・URLへ保存しません。
+
+## 生存確認のローカルリマインド（2026-10-24）
+
+日常の通知は端末OSへ24時間ごとに予約します。EAS projectIdやサーバー通知端末登録は不要です。通知タップ→端末ロック解除→前面の再検証後にnotification_actionチェックインを送ります。通常起動はforegroundです。受信・表示・バックグラウンドでの自動確認は行いません。チェックイン受付、期限監視、警告メールと公開判断はサーバーに残します。予約更新・停止・他端末との同期の制約は[ローカル通知仕様](docs/LOCAL-REMINDERS.md)を参照してください。

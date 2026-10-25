@@ -36,6 +36,7 @@ async function checkinWhileBackground() {
   const load = loader({
     'react-native':{AppState,Platform:{OS:'ios'}},
     './config':{apiUrl:'https://mock.invalid',mode:'api'},
+    '../services/reminders':{syncReminders:async()=>{},cancelReminders:async()=>{},observeReminderActions:()=>()=>{},takeReminderIntent:()=>false},
     '../api/config':{apiUrl:'https://mock.invalid',mode:'api'},
     '../storage/vault':{},
     'expo-crypto':{getRandomBytesAsync:async()=>new Uint8Array(32)},
@@ -115,6 +116,7 @@ async function staleUnlockAfterRelock() {
     'react-native':{AppState,Platform:{OS:'ios'},View:'View',StyleSheet:{absoluteFill:{}}},
     '@tanstack/react-query':{useQueryClient:()=>({setQueryData(){},invalidateQueries:async()=>{}})},
     'expo-screen-capture':{usePreventScreenCapture(){}},
+    '../services/reminders':{syncReminders:async()=>{},cancelReminders:async()=>{},observeReminderActions:()=>()=>{},takeReminderIntent:()=>false},
     '../api/config':{mode:'api'},
     '../billing/service':{suppressBillingCheckIn:()=>false},
     '../api/adapter':{gateway:{me:async()=>{started.resolve();return me.promise}}},

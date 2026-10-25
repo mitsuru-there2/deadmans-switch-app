@@ -1,11 +1,12 @@
 import { Platform } from "react-native";
 import { apiUrl, mode } from "./config";
 import { AppError } from "./errors";
-import { getSession, identityRevision } from "./session";
+import { getSession, identityRevision, subscribeIdentity } from "./session";
 import { createLiveGateway, type Gateway } from "./live";
 import type { Me, Recipient, Message } from "../domain/models";
+import { cancelReminders, syncReminders } from "../services/reminders";
 import { readPrivate, writePrivate } from "../storage/vault";
-const live = createLiveGateway(apiUrl ?? "https://unconfigured.invalid", {
+const remote = createLiveGateway(apiUrl ?? "https://unconfigured.invalid", {
   headers: async () => {
     if (mode !== "api" || Platform.OS === "web") throw new AppError("UNCONFIGURED");
     return { Authorization: `Bearer ${(await getSession()).token}` };
@@ -25,6 +26,55 @@ const live = createLiveGateway(apiUrl ?? "https://unconfigured.invalid", {
     }
   },
 });
+// Status snapshots drive local reminders; local scheduling never calls check-in.
+let reminderEpoch = 0;
+subscribeIdentity(() => {
+  reminderEpoch++;
+  void cancelReminders().catch(() => {});
+});
+async function observeStatus(epoch = reminderEpoch) {
+  const me = await remote.me();
+  if (epoch === reminderEpoch) await syncReminders(me.switch).catch(() => {});
+  return me;
+}
+async function authenticationFailed(error: unknown) {
+  if (
+    error instanceof AppError &&
+    ["UNAUTHORIZED", "RECOVERY_REQUIRED", "SUBSCRIPTION_REQUIRED"].includes(error.code)
+  ) {
+    reminderEpoch++;
+    await cancelReminders().catch(() => {});
+  }
+}
+async function changeMonitoring(operation: () => Promise<void>, stop = false) {
+  const epoch = ++reminderEpoch;
+  try {
+    await operation();
+    if (stop && epoch === reminderEpoch) await cancelReminders().catch(() => {});
+    // A successful operation stays successful even if the follow-up read or
+    // OS scheduler fails. The server remains authoritative for check-in.
+    if (epoch === reminderEpoch) await observeStatus(epoch).catch(authenticationFailed);
+  } catch (error) {
+    await authenticationFailed(error);
+    throw error;
+  }
+}
+const live: Gateway = {
+  ...remote,
+  me: async () => {
+    try {
+      return await observeStatus();
+    } catch (error) {
+      await authenticationFailed(error);
+      throw error;
+    }
+  },
+  checkIn: (kind, authorizeSend) => changeMonitoring(() => remote.checkIn(kind, authorizeSend)),
+  activate: (version, consentVersion) =>
+    changeMonitoring(() => remote.activate(version, consentVersion)),
+  pause: () => changeMonitoring(() => remote.pause(), true),
+};
+
 type DemoData = { me: Me; recipients: Recipient[]; messages: Message[] };
 const initial = (): DemoData => ({
   me: {
